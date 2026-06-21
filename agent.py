@@ -95,8 +95,8 @@ def main():
     task = """אתה סוכן AI שמכין דוח חדשות יומי בנושא AI ופיתוח תוכנה.
 1. קבל את התאריך הנוכחי
 2. שלוף חדשות מ-Hacker News
-3. שלוף פוסטים מ-Reddit r/MachineLearning
-4. שלוף פוסטים מ-Reddit r/artificial
+3. שלוף פוסטים מ-Reddit r/MachineLearning 
+4. שלוף פוסטים מ-Reddit r/artificial 
 5. בחר 5-7 פריטים הכי מעניינים
 6. שלח דוח מסודר ל-Telegram בעברית"""
     try:
