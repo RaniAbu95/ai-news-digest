@@ -1,16 +1,6 @@
-import os
 import feedparser
 import httpx
 from google import genai
-from dotenv import load_dotenv
-
-load_dotenv()
-
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-client = genai.Client(api_key=GEMINI_API_KEY)
 
 RSS_FEEDS = [
     "https://hnrss.org/frontpage",
@@ -38,12 +28,13 @@ def fetch_articles() -> list[dict]:
     return articles
 
 
-def filter_and_summarize(articles: list[dict]) -> str:
+def filter_and_summarize(articles: list[dict], gemini_api_key: str) -> str:
+    client = genai.Client(api_key=gemini_api_key)
     articles_text = "\n\n".join([
         f"כותרת: {a['title']}\nתקציר: {a['summary']}\nקישור: {a['link']}"
         for a in articles
     ])
-    
+
     prompt = f"""אתה עוזר שמסנן חדשות טכנולוגיה.
 
 הנה רשימת כתבות מהיום:
@@ -68,26 +59,33 @@ _⏱ {len(articles)} כתבות נסרקו_"""
     )
     return response.text
 
-def send_telegram(text: str):
+def send_telegram(text: str, bot_token: str, chat_id: str):
     httpx.post(
-        f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+        f"https://api.telegram.org/bot{bot_token}/sendMessage",
         json={
-            "chat_id": TELEGRAM_CHAT_ID,
+            "chat_id": chat_id,
             "text": text,
             "parse_mode": "Markdown"
         }
     )
 
 def main():
+    import os
+    from dotenv import load_dotenv
+    load_dotenv()
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
     print("מאסף כתבות...")
     articles = fetch_articles()
     print(f"נמצאו {len(articles)} כתבות")
-    
+
     print("מסנן ומסכם עם Gemini...")
-    digest = filter_and_summarize(articles)
-    
+    digest = filter_and_summarize(articles, gemini_api_key)
+
     print("שולח ל-Telegram...")
-    send_telegram(digest)
+    send_telegram(digest, bot_token, chat_id)
     print("נשלח!")
 
 if __name__ == "__main__":
