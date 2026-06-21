@@ -1,6 +1,6 @@
-import feedparser
-import httpx
-from google import genai
+import json
+import urllib.request
+import xml.etree.ElementTree as ET
 
 RSS_FEEDS = [
     "https://hnrss.org/frontpage",
@@ -10,26 +10,24 @@ RSS_FEEDS = [
 ]
 
 def fetch_articles() -> list[dict]:
-    import ssl
-    import certifi
     articles = []
     for url in RSS_FEEDS:
         try:
-            response = httpx.get(url, timeout=10, verify=certifi.where())
-            feed = feedparser.parse(response.text)
-            for entry in feed.entries[:8]:
-                articles.append({
-                    "title": entry.get("title", ""),
-                    "summary": entry.get("summary", "")[:300],
-                    "link": entry.get("link", "")
-                })
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as response:
+                content = response.read().decode("utf-8")
+            root = ET.fromstring(content)
+            for item in root.findall(".//item")[:8]:
+                title = item.findtext("title", "")
+                summary = (item.findtext("description", "") or "")[:300]
+                link = item.findtext("link", "")
+                articles.append({"title": title, "summary": summary, "link": link})
         except Exception as e:
             print(f"שגיאה ב-{url}: {e}")
     return articles
 
 
 def filter_and_summarize(articles: list[dict], gemini_api_key: str) -> str:
-    client = genai.Client(api_key=gemini_api_key)
     articles_text = "\n\n".join([
         f"כותרת: {a['title']}\nתקציר: {a['summary']}\nקישור: {a['link']}"
         for a in articles
@@ -53,21 +51,31 @@ def filter_and_summarize(articles: list[dict], gemini_api_key: str) -> str:
 
 _⏱ {len(articles)} כתבות נסרקו_"""
 
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt
-    )
-    return response.text
+    body = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}]
+    }).encode("utf-8")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req) as response:
+        result = json.loads(response.read().decode("utf-8"))
+
+    return result["candidates"][0]["content"]["parts"][0]["text"]
+
 
 def send_telegram(text: str, bot_token: str, chat_id: str):
-    httpx.post(
+    body = json.dumps({
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown"
+    }).encode("utf-8")
+    req = urllib.request.Request(
         f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "Markdown"
-        }
+        data=body,
+        headers={"Content-Type": "application/json"}
     )
+    urllib.request.urlopen(req)
+
 
 def main():
     import os
