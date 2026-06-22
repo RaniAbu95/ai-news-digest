@@ -35,7 +35,7 @@ def get_current_date():
     return datetime.now().strftime("%d/%m/%Y")
 
 def send_telegram_report(title, items, takeaway):
-    cost = round(total_tokens * 0.000002, 4)
+    cost = round(total_tokens * 0.000000075, 6)
     text = f"📊 {title}\n\nחדשות היום:\n{items}\n\nTakeaway:\n{takeaway}\n\nעלות: ${cost} | {total_tokens} tokens"
     response = httpx.post(
         f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
