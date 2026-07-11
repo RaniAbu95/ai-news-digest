@@ -19,16 +19,16 @@ def log_tool_call(name, args, result):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] TOOL: {name} | {str(result)[:80]}...")
 
 def fetch_hacker_news(limit=10):
-    feed = feedparser.parse(httpx.get("https://hnrss.org/frontpage", verify=certifi.where()).text)
+    feed = feedparser.parse(httpx.get("https://hnrss.org/frontpage", verify=certifi.where(), timeout=30).text)
     return "\n".join([f"{e.title} — {e.link}" for e in feed.entries[:limit]])
 
 def fetch_reddit_posts(subreddit, limit=8):
     url = f"https://www.reddit.com/r/{subreddit}/.rss"
-    feed = feedparser.parse(httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, verify=certifi.where()).text)
+    feed = feedparser.parse(httpx.get(url, headers={"User-Agent": "Mozilla/5.0"}, verify=certifi.where(), timeout=30).text)
     return "\n".join([f"{e.title} — {e.link}" for e in feed.entries[:limit]])
 
 def fetch_rss_feed(url):
-    feed = feedparser.parse(httpx.get(url, verify=certifi.where()).text)
+    feed = feedparser.parse(httpx.get(url, verify=certifi.where(), timeout=30).text)
     return "\n".join([f"{e.title} — {e.link}" for e in feed.entries[:8]])
 
 def get_current_date():
@@ -63,9 +63,16 @@ TOOLS = [{
     ]
 }]
 
-def call_gemini(messages):
+def call_gemini(messages, retries=3):
     global total_tokens
-    response = httpx.post(GEMINI_URL, json={"contents": messages, "tools": TOOLS}, timeout=60)
+    for attempt in range(retries):
+        try:
+            response = httpx.post(GEMINI_URL, json={"contents": messages, "tools": TOOLS}, timeout=120)
+            break
+        except httpx.TimeoutException:
+            if attempt == retries - 1:
+                raise
+            print(f"[{datetime.now().strftime('%H:%M:%S')}] Gemini timed out, retrying ({attempt + 1}/{retries})")
     data = response.json()
     if "error" in data:
         raise Exception(data["error"]["message"])
@@ -85,7 +92,10 @@ def agent_loop(task, max_iterations=15):
             fn = part["functionCall"]
             args = fn.get("args", {})
             func = TOOL_FUNCTIONS.get(fn["name"])
-            result = func(**args) if func else f"Unknown tool: {fn['name']}"
+            try:
+                result = func(**args) if func else f"Unknown tool: {fn['name']}"
+            except Exception as e:
+                result = f"Tool failed: {e}. Continue with other sources."
             log_tool_call(fn["name"], args, result)
             tool_results.append({"functionResponse": {"name": fn["name"], "response": {"result": result}}})
         messages.append({"role": "user", "parts": tool_results})
